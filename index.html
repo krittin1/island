@@ -26,6 +26,7 @@
   #panel.on,#intro.on{display:flex}
   .modal{max-width:460px;width:100%;padding:34px}
   .meta{color:var(--muted);font-size:14px;margin-bottom:12px}
+  #pBody{white-space:pre-line}
   .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
   .tags span{font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:99px;color:var(--muted)}
   .keys{margin-top:18px;font-size:14px;color:var(--muted)}
@@ -42,7 +43,7 @@
 <canvas id="c"></canvas>
 
 <div id="hud">
-  <div class="glass">Projects <b id="pCount">0/3</b></div>
+  <div class="glass">Stations <b id="pCount">0/3</b></div>
   <div class="glass">Stars <b id="sCount">0/12</b></div>
 </div>
 <div id="toast" class="glass"></div>
@@ -52,9 +53,9 @@
 
 <div id="intro" class="on">
   <div class="glass modal" style="text-align:left">
-    <p class="meta">Leeds University Business School</p>
+    <p class="meta">MSc student · University of Leeds</p>
     <h1>Hi, I'm <em>Krittin</em>.</h1>
-    <p style="margin-top:14px">This little island is my portfolio. Walk around, find the three project stations, and collect the stars along the way.</p>
+    <p style="margin-top:14px">This little island is my CV. Walk around, find the three stations, and collect the stars along the way.</p>
     <p class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move · <kbd>E</kbd> to interact · on phones, use the stick · scroll, pinch or <kbd>+</kbd><kbd>-</kbd> to zoom · <kbd>B</kbd> to see the whole building</p>
     <button class="btn" id="start">Start exploring</button>
   </div>
@@ -73,17 +74,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ---------- Edit these ---------- */
-const EMAIL = "you@example.com";
+const EMAIL = "krittinkanokwilairat@gmail.com";
 const STATIONS = [
-  { name:"Campus Thrift", meta:"Project one · 2025", color:0x7fa8ff, kind:"knot",
-    body:"A student-to-student marketplace for secondhand textbooks and furniture. I ran 40 interviews, found that trust mattered more than price, and designed the verified-student flow around it.",
-    tags:["User research","Prototype","Pricing"] },
-  { name:"Society Ledger", meta:"Project two · 2025", color:0xffd36e, kind:"bars",
-    body:"A simple finance dashboard for a student society with a £12k budget. It replaced three spreadsheets with one clear view of where money goes each term.",
-    tags:["Data","Dashboard","Budgeting"] },
-  { name:"Market Scout", meta:"Project three · 2026", color:0x8fd6a6, kind:"orbs",
-    body:"Market research for a local startup entering the oat-drink category. I sized the market, mapped competitors and presented a go-to-market plan to the founders.",
-    tags:["Strategy","Research","Presenting"] }
+  { name:"Education", meta:"Station one · Studies", color:0x7fa8ff, kind:"knot",
+    body:"2026–2027 · University of Leeds\nMaster of Science, MISDI\n\n2016–2020 · Kasetsart University\nBachelor of Science, Computer Science",
+    tags:["MSc MISDI","BSc CS","Leeds, UK"] },
+  { name:"Experience", meta:"Station two · Work", color:0xffd36e, kind:"bars",
+    body:"Part-time Document Assistant · Democrat Party Thailand\nPrepared, organised and filed documents accurately and on time, handling information carefully with close attention to detail.\n\nServer & Kitchen Assistant · Yum Aroi Bangkok\nTook orders accurately and served food and drinks in a busy restaurant, passed orders clearly between front of house and kitchen, and assisted the chef with food preparation during busy periods.",
+    tags:["Front of house","Kitchen","Admin"] },
+  { name:"Skills & Volunteering", meta:"Station three · Me", color:0x8fd6a6, kind:"orbs",
+    body:"Teamwork, reliability and punctuality, customer service, adaptability and fast learning, cultural awareness.\n\nLanguages: English, Thai.\n\nVolunteering: Community & Temple Development Volunteer in Nakhon Ratchasima and Bangkok, Thailand.",
+    tags:["Teamwork","Customer service","English","Thai"] }
 ];
 /* -------------------------------- */
 
@@ -467,11 +468,11 @@ function tryInteract(){
   if (!started || !near) return;
   if (near.kind==='project'){
     const d = near.data;
-    if (!near.found){ near.found = true; near.ring.material.color.set(0x5cc27f); hud(); toast(found()===3 ? 'All projects found. The gate in the centre is open.' : 'Project discovered'); if (found()===3) unlockGate(); }
+    if (!near.found){ near.found = true; near.ring.material.color.set(0x5cc27f); hud(); toast(found()===3 ? 'All stations found. The gate in the centre is open.' : 'Station discovered'); if (found()===3) unlockGate(); }
     openPanel(d.meta, d.name.replace(/(\S+)$/, '<em>$1</em>'), d.body, d.tags);
   } else {
-    if (found() < 3){ openPanel('Locked', 'Not <em>yet</em>', 'Visit all three project stations to open the gate. You have found ' + found() + ' of 3.', []); }
-    else openPanel("What's next", "Let's build <em>something</em>.", "I'm looking for internships in product, strategy and operations. If you have a problem worth solving, I'd love to hear it. Stars collected: " + starCount() + "/12.", [], true);
+    if (found() < 3){ openPanel('Locked', 'Not <em>yet</em>', 'Visit all three stations to open the gate. You have found ' + found() + ' of 3.', []); }
+    else openPanel("What's next", "Let's <em>talk</em>.", "I'm looking for part-time work in a restaurant, café or similar role, up to 20 hours a week. I have front of house and kitchen experience, stay calm under pressure and put people first. Happy to work evenings and weekends. Stars collected: " + starCount() + "/12.", [], true);
   }
 }
 function unlockGate(){ gRing.material.color.set(0xff9a5c); gOrb.material.color.set(0xffd36e); gOrb.material.emissive.set(0xffa500); gOrb.material.emissiveIntensity = .5; }
