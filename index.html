@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Krittin's Island</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#1b1a17;--muted:#6d685e;--card:rgba(255,253,248,.86);--line:rgba(27,26,23,.12);--accent:#ff9a5c}
+  *{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:#dfe8f0;color:var(--ink);font-family:Inter,system-ui,sans-serif;touch-action:none;user-select:none}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .glass{background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:20px}
+  h1,h2{font-family:'Instrument Serif',serif;font-weight:400;line-height:1.05}
+  h1{font-size:clamp(44px,8vw,76px)} h2{font-size:clamp(32px,5vw,46px);margin-bottom:12px}
+  em{font-style:italic}
+  p{line-height:1.6;font-size:16px;color:#3a372f}
+  .btn{display:inline-block;margin-top:22px;padding:13px 26px;background:var(--ink);color:#eef3f8;border:0;border-radius:99px;font:500 15px Inter;cursor:pointer;text-decoration:none;transition:transform .2s}
+  .btn:hover{transform:translateY(-2px)}
+  #hud{position:fixed;top:16px;left:16px;right:16px;display:flex;justify-content:space-between;gap:10px;pointer-events:none;z-index:5}
+  #hud .glass{padding:10px 16px;font-size:14px}
+  #hud b{font-weight:500}
+  #prompt{position:fixed;left:50%;bottom:11vh;transform:translate(-50%,20px);opacity:0;transition:.3s;z-index:5;padding:12px 22px;font-size:15px;cursor:pointer}
+  #prompt.on{opacity:1;transform:translate(-50%,0)}
+  #panel,#intro{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;z-index:10;background:rgba(223,232,240,.5)}
+  #panel.on,#intro.on{display:flex}
+  .modal{max-width:460px;width:100%;padding:34px}
+  .meta{color:var(--muted);font-size:14px;margin-bottom:12px}
+  .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .tags span{font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:99px;color:var(--muted)}
+  .keys{margin-top:18px;font-size:14px;color:var(--muted)}
+  .keys kbd{font:500 12px Inter;border:1px solid var(--line);border-radius:6px;padding:2px 7px;background:#fff8}
+  #stick{position:fixed;left:24px;bottom:28px;width:120px;height:120px;border-radius:50%;z-index:6;display:none;background:rgba(255,253,248,.5);border:1px solid var(--line)}
+  #knob{position:absolute;left:40px;top:40px;width:40px;height:40px;border-radius:50%;background:var(--ink);opacity:.75}
+  @media (pointer:coarse){#stick{display:block}}
+  #toast{position:fixed;top:70px;left:50%;transform:translate(-50%,-10px);opacity:0;transition:.4s;z-index:6;padding:10px 18px;font-size:14px}
+  #viewBtn{position:fixed;right:16px;bottom:16px;z-index:6;padding:10px 16px;font:500 14px Inter;color:var(--ink);cursor:pointer}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div class="glass">Projects <b id="pCount">0/3</b></div>
+  <div class="glass">Stars <b id="sCount">0/12</b></div>
+</div>
+<div id="toast" class="glass"></div>
+<button id="viewBtn" class="glass">View building</button>
+<div id="prompt" class="glass"></div>
+<div id="stick"><div id="knob"></div></div>
+
+<div id="intro" class="on">
+  <div class="glass modal" style="text-align:left">
+    <p class="meta">Leeds University Business School</p>
+    <h1>Hi, I'm <em>Krittin</em>.</h1>
+    <p style="margin-top:14px">This little island is my portfolio. Walk around, find the three project stations, and collect the stars along the way.</p>
+    <p class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to move · <kbd>E</kbd> to interact · on phones, use the stick · scroll, pinch or <kbd>+</kbd><kbd>-</kbd> to zoom · <kbd>B</kbd> to see the whole building</p>
+    <button class="btn" id="start">Start exploring</button>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="glass modal">
+    <p class="meta" id="pMeta"></p>
+    <h2 id="pTitle"></h2>
+    <p id="pBody"></p>
+    <div class="tags" id="pTags"></div>
+    <button class="btn" id="pClose">Keep exploring</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ---------- Edit these ---------- */
+const EMAIL = "you@example.com";
+const STATIONS = [
+  { name:"Campus Thrift", meta:"Project one · 2025", color:0x7fa8ff, kind:"knot",
+    body:"A student-to-student marketplace for secondhand textbooks and furniture. I ran 40 interviews, found that trust mattered more than price, and designed the verified-student flow around it.",
+    tags:["User research","Prototype","Pricing"] },
+  { name:"Society Ledger", meta:"Project two · 2025", color:0xffd36e, kind:"bars",
+    body:"A simple finance dashboard for a student society with a £12k budget. It replaced three spreadsheets with one clear view of where money goes each term.",
+    tags:["Data","Dashboard","Budgeting"] },
+  { name:"Market Scout", meta:"Project three · 2026", color:0x8fd6a6, kind:"orbs",
+    body:"Market research for a local startup entering the oat-drink category. I sized the market, mapped competitors and presented a go-to-market plan to the founders.",
+    tags:["Strategy","Research","Presenting"] }
+];
+/* -------------------------------- */
+
+const $ = id => document.getElementById(id);
+const renderer = new THREE.WebGLRenderer({canvas:$('c'), antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe8f0);
+scene.fog = new THREE.Fog(0xdfe8f0, 30, 80);
+const camera = new THREE.PerspectiveCamera(45, 1, .1, 200);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb8c8d8, .95));
+const sun = new THREE.DirectionalLight(0xf2f6ff, .8);
+sun.position.set(10, 18, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera, {left:-28,right:28,top:28,bottom:-28,near:1,far:60});
+scene.add(sun);
+
+const M = (c, o={}) => new THREE.MeshStandardMaterial(Object.assign({color:c, roughness:.5, metalness:.02}, o));
+const shadowed = o => { o.traverse(m => { if (m.isMesh){ m.castShadow = true; m.receiveShadow = true; } }); return o; };
+
+/* ---- island ---- */
+const R = 24;
+const ground = new THREE.Mesh(new THREE.CylinderGeometry(R, R-3, 2.5, 64), M(0xf6f9fc));
+ground.position.y = -1.25; ground.receiveShadow = true; scene.add(ground);
+const rock = new THREE.Mesh(new THREE.ConeGeometry(R-3, 10, 48), M(0x9fb0c2, {flatShading:true}));
+rock.position.y = -7.5; rock.rotation.x = Math.PI; scene.add(rock);
+const path = new THREE.Mesh(new THREE.CircleGeometry(4.2, 48), M(0xd9e3ee));
+path.rotation.x = -Math.PI/2; path.position.y = .01; path.receiveShadow = true; scene.add(path);
+
+const obstacles = []; // {x,z,r}
+function tree(x,z,s=1){
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.25*s,1.2*s,8), M(0x9a7b5a)); trunk.position.y = .6*s;
+  const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.1*s,2*s,8), M(0x4f7f6a,{flatShading:true})); c1.position.y = 2*s;
+  const c2 = new THREE.Mesh(new THREE.ConeGeometry(.8*s,1.6*s,8), M(0x5d9079,{flatShading:true})); c2.position.y = 3.1*s;
+  const cap1 = new THREE.Mesh(new THREE.ConeGeometry(.75*s,.9*s,8), M(0xffffff,{flatShading:true})); cap1.position.y = 2.6*s;
+  const cap2 = new THREE.Mesh(new THREE.ConeGeometry(.5*s,.7*s,8), M(0xffffff,{flatShading:true})); cap2.position.y = 3.6*s;
+  g.add(trunk,c1,c2,cap1,cap2); g.position.set(x,0,z); scene.add(shadowed(g)); obstacles.push({x,z,r:.7*s});
+}
+function rockProp(x,z,s){
+  const m = new THREE.Mesh(new THREE.DodecahedronGeometry(s,0), M(0xaab4c0,{flatShading:true}));
+  m.position.set(x,s*.5,z); m.rotation.set(Math.random(),Math.random(),0); scene.add(shadowed(m)); obstacles.push({x,z,r:s*.9});
+}
+
+
+/* ---- Parkinson Building (University of Leeds): long stone wings, recessed columned entrance, slender flat-topped clock tower ---- */
+{
+  const b = new THREE.Group();
+  const stone = M(0xefe9da,{roughness:.85}), band = M(0xd6cfbc,{roughness:.85}), dark = M(0x39414a,{roughness:.6}), white = M(0xffffff);
+  const box = (w,h,d,x,y,z,mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat); m.position.set(x,y,z); b.add(m); return m; };
+  // long wings, set-back attic, horizontal cornice bands
+  box(26,6.4,5, 0,3.2,0, stone);
+  box(22,1.6,3.8, 0,7.2,-.5, stone);
+  box(26.4,.28,5.3, 0,3.75,0, band);
+  box(26.4,.34,5.4, 0,6.5,0, band);
+  box(26.4,.25,5.3, 0,1.7,0, band);
+  box(23,.3,4.1, 0,8.05,-.5, band);
+  // four rows of windows on each wing: arched ground floor, two tall floors, small attic
+  [-1,1].forEach(side => { for (let i=0;i<5;i++){
+    const x = side*(4.6+i*1.95);
+    box(.6,.9,.15, x,.95,2.52, dark);
+    const arch = new THREE.Mesh(new THREE.CylinderGeometry(.3,.3,.15,12,1,false,0,Math.PI), dark); arch.rotation.x = Math.PI/2; arch.position.set(x,1.4,2.52); b.add(arch);
+    box(.75,1.45,.15, x,2.75,2.52, dark);
+    box(.75,1.45,.15, x,4.95,2.52, dark);
+    box(.55,.55,.15, x,7.3,1.42, dark);
+  } });
+  // central block with set-back, recessed portico, five square columns, no pediment
+  box(9.4,8,5.6, 0,4,.3, stone);
+  box(7.6,1.7,4.2, 0,8.85,-.2, stone);
+  box(9.8,.34,5.8, 0,6.5,.3, band);
+  box(8.4,.3,4.6, 0,9.75,-.2, band);
+  box(6.6,4.4,.12, 0,2.6,3.12, dark);
+  [-2.7,-1.35,0,1.35,2.7].forEach(x => { box(.62,4.6,.62, x,2.5,3.55, stone); box(.82,.2,.82, x,4.85,3.55, band); });
+  [-1.4,0,1.4].forEach(x => box(.7,2.2,.1, x,1.2,3.2, M(0x2a3138)));
+  box(7.9,.9,1.2, 0,5.35,3.55, band);
+  box(1.3,5.6,1.2, -4.05,2.8,3.4, stone); box(1.3,5.6,1.2, 4.05,2.8,3.4, stone);
+  for (let i=0;i<5;i++) box(9.4-i*.45,.3,1.0, 0,.15+i*.3,5.0-i*.4, M(0xe9ecef));
+  // stepped tower after the Parkinson icon: wide shaft with recessed clock panel, plinth, slit tiers, tapered cap, low pyramid
+  const TZ = -.4, base = 9.7;
+  const dk = dark;
+  const shaftH = 4.5, plH = .68, t3H = 2.04, t2H = 1.06;
+  const yShaft = base + shaftH/2, yPl = base + shaftH + plH/2, yT3 = base + shaftH + plH + t3H/2, yT2 = base + shaftH + plH + t3H + t2H/2;
+  const yDrum = base + shaftH + plH + t3H + t2H;
+  box(3.6,shaftH,3.6, 0,yShaft,TZ, stone);
+  box(3.23,plH,3.23, 0,yPl,TZ, band);
+  box(3.02,t3H,3.02, 0,yT3,TZ, stone);
+  box(2.6,t2H,2.6, 0,yT2,TZ, stone);
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(1.74/Math.SQRT2,1.97/Math.SQRT2,.72,4), stone); drum.rotation.y = Math.PI/4; drum.position.set(0,yDrum+.36,TZ); b.add(drum);
+  box(1.8,.06,1.8, 0,yDrum+.74,TZ, dk);
+  const pyr = new THREE.Mesh(new THREE.ConeGeometry(1.2,.55,4), stone); pyr.rotation.y = Math.PI/4; pyr.position.set(0,yDrum+.72+.28,TZ); b.add(pyr);
+  // decoration on front and both sides: [face rotation]
+  [0, Math.PI/2, -Math.PI/2].forEach(ry => {
+    const g = new THREE.Group(); g.position.set(0,0,TZ); g.rotation.y = ry; b.add(g);
+    const gb = (w,h,d,x,y,z,mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat); m.position.set(x,y,z); g.add(m); };
+    // recessed panel on shaft: dark frame, then stone
+    gb(1.9,shaftH-.05,.1, 0,yShaft-.02,1.82, dk);
+    gb(1.58,shaftH-.2,.12, 0,yShaft-.07,1.82, stone);
+    // round clock in the panel
+    const cy = base + shaftH - 1.25;
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(.48,.48,.12,40), dk); ring.rotation.x = Math.PI/2; ring.position.set(0,cy,1.9); g.add(ring);
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(.38,.38,.14,40), white); face.rotation.x = Math.PI/2; face.position.set(0,cy,1.91); g.add(face);
+    gb(.05,.3,.03, 0,cy+.12,1.99, dk); gb(.22,.05,.03, .08,cy,1.99, dk);
+    // dark band near the top of the lower slit tier
+    gb(2.3,.12,.06, 0,base+shaftH+plH+t3H-.18,1.53, dk);
+    // three tall gamma-shaped slits on the big tier
+    [-.72,0,.72].forEach(x => { gb(.13,1.6,.06, x,yT3-.1,1.53, dk); gb(.46,.13,.06, x+.17,yT3+.7,1.53, dk); });
+    // three small gamma slits on the upper tier
+    [-.5,0,.5].forEach(x => { gb(.09,.38,.06, x,yT2+.12,1.33, dk); gb(.24,.09,.06, x+.07,yT2+.31,1.33, dk); });
+  });
+  b.position.set(0,0,-21);
+  scene.add(shadowed(b));
+}
+const BUILD_Z = -16.2;
+
+/* ---- stations ---- */
+const stationAngles = [Math.PI*.78, Math.PI*.22, -Math.PI*.5];
+const SR = 12;
+const stations = STATIONS.map((d,i) => {
+  const g = new THREE.Group();
+  const a = stationAngles[i];
+  g.position.set(Math.cos(a)*SR, 0, Math.sin(a)*SR);
+  const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.7,.5,32), M(0xeef3f8));
+  ped.position.y = .25; g.add(ped);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.3,2.7,48), new THREE.MeshBasicMaterial({color:d.color, transparent:true, opacity:.8, side:THREE.DoubleSide}));
+  ring.rotation.x = -Math.PI/2; ring.position.y = .03; g.add(ring);
+  const obj = new THREE.Group(); obj.position.y = 2.3;
+  let tick;
+  if (d.kind==='knot'){
+    obj.add(new THREE.Mesh(new THREE.TorusKnotGeometry(.7,.24,120,16,2,3), M(d.color,{roughness:.25})));
+    tick = t => { obj.rotation.y = t*.8; };
+  } else if (d.kind==='bars'){
+    const bars = [0,1,2,3].map(k => { const b = new THREE.Mesh(new THREE.BoxGeometry(.38,1,.38), M(k%2?0xff9a5c:d.color)); b.position.x = (k-1.5)*.5; obj.add(b); return b; });
+    tick = t => { bars.forEach((b,k) => { const h = .6 + (k+1)*.3*(0.8+.2*Math.sin(t*1.5+k)); b.scale.y = h; b.position.y = h/2-.6; }); obj.rotation.y = Math.sin(t*.5)*.5; };
+  } else {
+    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(.55,1), M(d.color,{flatShading:true})); obj.add(core);
+    const orbs = [0,1,2,3,4].map(k => { const o = new THREE.Mesh(new THREE.SphereGeometry(.14,16,16), M(k%2?0xe6ecf5:0xff9a5c)); obj.add(o); return o; });
+    tick = t => { core.rotation.y = t*.5; orbs.forEach((o,k) => { const an = t*.9 + k*1.26; o.position.set(Math.cos(an)*1.1, Math.sin(t+k)*.3, Math.sin(an)*1.1); }); };
+  }
+  g.add(obj);
+  // name label sprite
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 128;
+  const cx = cv.getContext('2d'); cx.font = '64px "Instrument Serif", Georgia, serif'; cx.textAlign = 'center'; cx.fillStyle = '#1b1a17'; cx.fillText(d.name, 256, 82);
+  const tex = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthTest:false}));
+  sp.scale.set(4,1,1); sp.position.y = 4.4; g.add(sp);
+  scene.add(shadowed(g));
+  obstacles.push({x:g.position.x, z:g.position.z, r:1.6});
+  return {g, ring, obj, tick, data:d, found:false, kind:'project'};
+});
+
+/* ---- finale: gate in the centre, unlocks after 3 projects ---- */
+const gate = new THREE.Group();
+const gRing = new THREE.Mesh(new THREE.TorusGeometry(1.5,.22,24,64), M(0xcccccc,{roughness:.3}));
+gRing.position.y = 2; gate.add(gRing);
+const gOrb = new THREE.Mesh(new THREE.SphereGeometry(.7,32,32), M(0xcccccc,{roughness:.2}));
+gOrb.position.y = 2; gate.add(gOrb);
+const gBase = new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.4,.4,32), M(0xeef3f8)); gBase.position.y = .2; gate.add(gBase);
+gate.position.set(0,0,0); scene.add(shadowed(gate)); obstacles.push({x:0,z:0,r:1.4});
+const gateSt = {g:gate, data:null, found:false, kind:'gate'};
+
+/* ---- decoration ---- */
+let seed = 7; const rnd = () => (seed = (seed*16807)%2147483647)/2147483647;
+const farFrom = (x,z) => stations.every(s => Math.hypot(x-s.g.position.x, z-s.g.position.z) > 4.5) && Math.hypot(x,z) > 4;
+let placed = 0, tries = 0;
+while (placed < 32 && tries++ < 400){
+  const a = rnd()*Math.PI*2, r = 5 + rnd()*(R-7), x = Math.cos(a)*r, z = Math.sin(a)*r;
+  if (!farFrom(x,z)) continue;
+  (rnd() < .78) ? tree(x,z,.8+rnd()*.7) : rockProp(x,z,.4+rnd()*.5);
+  placed++;
+}
+
+/* ---- festive extras: Christmas tree, white rabbit, squirrels ---- */
+const anim = [];
+{
+  const free = (px,pz,r) => {
+    for (let k=0;k<500;k++){
+      const a = k*2.4, d = Math.sqrt(k)*.7, x = px+Math.cos(a)*d, z = pz+Math.sin(a)*d;
+      if (Math.hypot(x,z) > R-4 || Math.hypot(x,z) < 5 || z < BUILD_Z+3) continue;
+      if (stations.some(st => Math.hypot(x-st.g.position.x, z-st.g.position.z) < 4.5)) continue;
+      if (obstacles.some(o => Math.hypot(x-o.x, z-o.z) < o.r+r+.6)) continue;
+      return {x,z};
+    }
+    return {x:px,z:pz};
+  };
+  const sph = (r,mat,sx=1,sy=1,sz=1,seg=16) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r,seg,seg), mat); m.scale.set(sx,sy,sz); return m; };
+  const at = (m,x,y,z) => { m.position.set(x,y,z); return m; };
+
+  /* Christmas tree */
+  {
+    const pos = free(-9,-5,2.2);
+    const g = new THREE.Group(); g.name = 'xmas'; g.position.set(pos.x,0,pos.z);
+    const green = M(0x2f7d4f,{flatShading:true,roughness:.7});
+    g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(.3,.4,1.2,10), M(0x7a5a3a)),0,.6,0));
+    const tiers = [[2.1,2.3],[1.7,2.1],[1.3,1.9],[.9,1.7]]; // [radius, height]
+    const bases = [];
+    tiers.forEach(([r,h],i) => { const base = 1+i*1.5; bases.push(base); g.add(at(new THREE.Mesh(new THREE.ConeGeometry(r,h,18), green), 0, base+h/2, 0)); });
+    const rAt = y => { let r = .1; tiers.forEach(([tr,h],i) => { if (y>=bases[i] && y<=bases[i]+h) r = tr*(1-(y-bases[i])/h)+.08; }); return r; };
+    // ornaments on every tier
+    const ornCols = [0xe53935,0xffc83d,0x4a90e2,0xffffff];
+    tiers.forEach(([r,h],i) => { for (let k=0;k<6+ (3-i);k++){
+      const f = .18+((k*37+i*11)%60)/100*.6, a = k*2.399+i, y = bases[i]+f*h*.9, rad = rAt(y)+.04;
+      g.add(at(sph(.13,M(ornCols[(k+i)%4],{roughness:.2,metalness:.4}),1,1,1,12), Math.cos(a)*rad, y, Math.sin(a)*rad));
+    } });
+    // spiral of twinkling lights
+    const lights = [];
+    for (let k=0;k<44;k++){
+      const t = k/44, y = 1.5+t*5.9, a = t*13*Math.PI, rad = rAt(y)+.05;
+      const mat = M(0xfff2b0,{emissive:0xffd54f,emissiveIntensity:.8,roughness:.3});
+      g.add(at(sph(.07,mat,1,1,1,8), Math.cos(a)*rad, y, Math.sin(a)*rad)); lights.push(mat);
+    }
+    const topStar = new THREE.Mesh(new THREE.OctahedronGeometry(.5), M(0xffc83d,{emissive:0xffa500,emissiveIntensity:.7,roughness:.25}));
+    topStar.scale.y = 1.4; topStar.position.y = 8.35; g.add(topStar);
+    // presents
+    [[2.7,.6,0xe53935,.8],[-2.6,1.2,0x4a90e2,.7],[1.2,2.8,0xffc83d,.6]].forEach(([px,pz,c,sz]) => {
+      const pg = new THREE.Group(); pg.position.set(px,0,pz); pg.rotation.y = px;
+      pg.add(at(new THREE.Mesh(new THREE.BoxGeometry(sz,sz*.8,sz), M(c)), 0, sz*.4, 0));
+      pg.add(at(new THREE.Mesh(new THREE.BoxGeometry(sz*1.04,sz*.8,.1), M(0xffffff)), 0, sz*.4, 0));
+      pg.add(at(new THREE.Mesh(new THREE.BoxGeometry(.1,sz*.8,sz*1.04), M(0xffffff)), 0, sz*.4, 0));
+      g.add(pg); obstacles.push({x:pos.x+px, z:pos.z+pz, r:sz*.7});
+    });
+    scene.add(shadowed(g)); obstacles.push({x:pos.x, z:pos.z, r:1.7});
+    anim.push((t) => { lights.forEach((m,k) => { m.emissiveIntensity = .45+.55*Math.max(0,Math.sin(t*3+k*.9)); }); topStar.rotation.y = t*1.2; });
+  }
+
+  /* wandering animals */
+  const critters = [];
+  const pick = c => { const a = Math.random()*6.283, r = Math.random()*c.rad; c.tx = c.home.x+Math.cos(a)*r; c.tz = c.home.z+Math.sin(a)*r; c.age = 0; };
+  const addCritter = (g, home, o) => {
+    const c = Object.assign({g, home, tx:home.x, tz:home.z, wait:1, face:0, age:0, moving:false, ph:Math.random()*6}, o);
+    g.position.set(home.x,0,home.z); scene.add(shadowed(g)); critters.push(c);
+    anim.push((t,dt) => update(c,t,dt)); return c;
+  };
+  const update = (c,t,dt) => {
+    const p = c.g.position, dpx = p.x-player.position.x, dpz = p.z-player.position.z, dp = Math.hypot(dpx,dpz);
+    let sp = c.speed, scared = false;
+    if (dp < c.scare){ scared = true; sp *= 1.8; const n = Math.max(dp,.01); c.tx = p.x+dpx/n*3; c.tz = p.z+dpz/n*3; c.wait = 0; }
+    c.moving = false;
+    if (c.wait > 0) c.wait -= dt;
+    else {
+      const dx = c.tx-p.x, dz = c.tz-p.z, d = Math.hypot(dx,dz);
+      c.age += dt;
+      if (d < .2 || c.age > 6){ c.wait = .8+Math.random()*2.5; pick(c); }
+      else {
+        p.x += dx/d*sp*dt; p.z += dz/d*sp*dt; c.moving = true;
+        const df = (Math.atan2(dx,dz)-c.face+Math.PI*3)%(Math.PI*2)-Math.PI; c.face += df*Math.min(1,dt*10); c.g.rotation.y = c.face;
+      }
+    }
+    obstacles.forEach(o => { const dx = p.x-o.x, dz = p.z-o.z, d = Math.hypot(dx,dz), m = o.r+.35; if (d<m && d>0){ p.x = o.x+dx/d*m; p.z = o.z+dz/d*m; } });
+    const pd = Math.hypot(p.x,p.z); if (pd > R-1.5){ p.x *= (R-1.5)/pd; p.z *= (R-1.5)/pd; }
+    if (Math.abs(p.x) < 14 && p.z < BUILD_Z) p.z = BUILD_Z;
+    p.y = c.moving ? Math.abs(Math.sin(t*c.hopF+c.ph))*c.hopH*(scared?1.3:1) : 0;
+    if (c.tail) c.tail.rotation.z = Math.sin(t*(c.moving?10:3)+c.ph)*.22;
+    if (c.ears) c.ears.forEach((e,i) => { e.rotation.x = -.12+(c.moving?0:Math.sin(t*2.2+i*1.7+c.ph)*.06); });
+  };
+
+  // white rabbit
+  {
+    const g = new THREE.Group(); g.scale.setScalar(1.35);
+    const white = M(0xe9eef5,{roughness:.9}), pink = M(0xffb3c1,{roughness:.7}), blk = M(0x1b1a17);
+    g.add(at(sph(.42,white,1,.85,1.3,20),0,.45,0));
+    g.add(at(sph(.27,white,1,1,1,20),0,.8,.42));
+    g.add(at(sph(.14,white),0,.5,-.58));
+    g.add(at(sph(.1,white,1,.8,1.4),-.15,.1,.35), at(sph(.1,white,1,.8,1.4),.15,.1,.35));
+    g.add(at(sph(.16,white,.8,.8,1.6),-.27,.15,-.2), at(sph(.16,white,.8,.8,1.6),.27,.15,-.2));
+    g.add(at(sph(.045,blk,1,1,1,8),-.13,.86,.62), at(sph(.045,blk,1,1,1,8),.13,.86,.62), at(sph(.05,pink,1,1,1,8),0,.78,.68));
+    const ears = [-1,1].map(sx => { const e = new THREE.Group(); e.position.set(sx*.11,1.0,.38); e.rotation.z = -sx*.16;
+      e.add(at(new THREE.Mesh(new THREE.CylinderGeometry(.07,.09,.62,10), white),0,.31,0));
+      e.add(at(sph(.075,white,1,1,1,10),0,.62,0));
+      e.add(at(new THREE.Mesh(new THREE.BoxGeometry(.05,.42,.02), pink),0,.34,.07)); g.add(e); return e; });
+    const home = free(4,3,1);
+    addCritter(g, home, {rad:3.2, speed:1.5, hopF:11, hopH:.28, scare:3, ears});
+  }
+
+  // squirrels
+  const squirrel = () => {
+    const g = new THREE.Group();
+    const fur = M(0xb5651d,{roughness:.9}), belly = M(0xf0d9b5,{roughness:.9}), blk = M(0x1b1a17), nut = M(0x8a5a2b);
+    g.add(at(sph(.3,fur,1,1,1.3,16),0,.42,0));
+    g.add(at(sph(.2,belly,.9,1,.6,12),0,.4,.25));
+    g.add(at(sph(.22,fur,1,1,1,16),0,.74,.3));
+    g.add(at(new THREE.Mesh(new THREE.ConeGeometry(.07,.2,8), fur),-.11,1,.28), at(new THREE.Mesh(new THREE.ConeGeometry(.07,.2,8), fur),.11,1,.28));
+    g.add(at(sph(.04,blk,1,1,1,8),-.09,.78,.48), at(sph(.04,blk,1,1,1,8),.09,.78,.48), at(sph(.04,blk,1,1,1,8),0,.72,.52));
+    g.add(at(sph(.08,fur,1,1,1.5,8),-.14,.14,.2), at(sph(.08,fur,1,1,1.5,8),.14,.14,.2));
+    g.add(at(sph(.1,fur,.8,1,1.6,8),-.2,.14,-.15), at(sph(.1,fur,.8,1,1.6,8),.2,.14,-.15));
+    g.add(at(sph(.075,nut,1,1.2,1,8),0,.55,.45));
+    const tail = new THREE.Group(); tail.position.set(0,.45,-.38);
+    tail.add(at(sph(.24,fur,.75,1.7,.8,14),0,.4,-.15));
+    tail.add(at(sph(.2,belly,.65,.7,.7,12),0,.95,-.05));
+    g.add(tail);
+    return {g, tail};
+  };
+  [[-12,4],[12,-3]].forEach(([hx,hz]) => { const {g,tail} = squirrel(); g.name = 'squirrel'; addCritter(g, free(hx,hz,1), {rad:3.5, speed:2.6, hopF:16, hopH:.18, scare:2.4, tail}); });
+}
+
+/* ---- stars ---- */
+const stars = [];
+const starGeo = new THREE.OctahedronGeometry(.4);
+for (let i=0;i<12;i++){
+  let x,z,ok=false,k=0;
+  while(!ok && k++<80){ const a = rnd()*Math.PI*2, r = 3+rnd()*(R-6); x=Math.cos(a)*r; z=Math.sin(a)*r; ok = obstacles.every(o => Math.hypot(x-o.x,z-o.z) > o.r+1.2); }
+  const m = new THREE.Mesh(starGeo, M(0xffc83d,{emissive:0xffa500, emissiveIntensity:.35, roughness:.25}));
+  m.position.set(x,1.1,z); m.castShadow = true; scene.add(m); stars.push({m, got:false, ph:rnd()*6});
+}
+
+/* ---- player: a man in a winter coat ---- */
+const player = new THREE.Group();
+const coatM = M(0x2f5d8a,{roughness:.7}), skin = M(0xe0ac85,{roughness:.6}), jeans = M(0x2b2f3a), hair = M(0x2a1d16);
+const body = new THREE.Group(); body.position.y = 0;
+const torso = new THREE.Mesh(new THREE.CylinderGeometry(.5,.58,1.2,20), coatM); torso.position.y = 1.35; body.add(torso);
+const scarf = new THREE.Mesh(new THREE.TorusGeometry(.4,.13,12,24), M(0xd9534f)); scarf.rotation.x = Math.PI/2; scarf.position.y = 1.95; body.add(scarf);
+const head = new THREE.Group(); head.position.y = 2.3;
+const faceMesh = new THREE.Mesh(new THREE.SphereGeometry(.37,32,32), skin); head.add(faceMesh);
+const beanie = new THREE.Mesh(new THREE.SphereGeometry(.4,32,16,0,Math.PI*2,0,Math.PI*.55), M(0x1b1a17)); beanie.position.y = .06; head.add(beanie);
+const pom = new THREE.Mesh(new THREE.SphereGeometry(.12,16,16), M(0xffffff)); pom.position.y = .46; head.add(pom);
+const eyeG = new THREE.SphereGeometry(.05,12,12), eyeM = M(0x1b1a17);
+const e1 = new THREE.Mesh(eyeG,eyeM), e2 = new THREE.Mesh(eyeG,eyeM);
+e1.position.set(-.13,-.02,.32); e2.position.set(.13,-.02,.32); head.add(e1,e2);
+body.add(head);
+const armG = new THREE.CylinderGeometry(.14,.14,.9,12);
+const armL = new THREE.Mesh(armG, coatM), armR = new THREE.Mesh(armG, coatM);
+armL.position.set(-.68,1.35,0); armR.position.set(.68,1.35,0); body.add(armL, armR);
+const legG = new THREE.CylinderGeometry(.18,.18,.9,12);
+const legL = new THREE.Mesh(legG, jeans), legR = new THREE.Mesh(legG, jeans);
+legL.position.set(-.22,.45,0); legR.position.set(.22,.45,0);
+player.add(body, legL, legR); scene.add(shadowed(player));
+player.position.set(0,0,6);
+const PR = .6;
+
+
+/* ---- snowfall ---- */
+const SN = 900, snowPos = new Float32Array(SN*3), snowSpd = new Float32Array(SN);
+for (let i=0;i<SN;i++){ snowPos[i*3]=(Math.random()-.5)*60; snowPos[i*3+1]=Math.random()*26; snowPos[i*3+2]=(Math.random()-.5)*60; snowSpd[i]=1.2+Math.random()*1.6; }
+const snowGeo = new THREE.BufferGeometry(); snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos,3));
+const snowPts = new THREE.Points(snowGeo, new THREE.PointsMaterial({color:0xffffff,size:.22,transparent:true,opacity:.9,depthWrite:false}));
+snowPts.frustumCulled = false; scene.add(snowPts);
+
+/* ---- input ---- */
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code==='KeyE' || e.code==='Enter' || e.code==='Space'){ panelOpen ? closePanel() : tryInteract(); }
+  if (e.code==='Escape') closePanel();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+});
+addEventListener('keyup', e => keys[e.code] = false);
+const joy = {x:0,y:0};
+const stick = $('stick'), knob = $('knob');
+let joyId = null;
+stick.addEventListener('pointerdown', e => { joyId = e.pointerId; stick.setPointerCapture(joyId); moveJoy(e); });
+stick.addEventListener('pointermove', e => { if (e.pointerId===joyId) moveJoy(e); });
+const endJoy = e => { if (e.pointerId===joyId){ joyId = null; joy.x = joy.y = 0; knob.style.transform = ''; } };
+stick.addEventListener('pointerup', endJoy); stick.addEventListener('pointercancel', endJoy);
+function moveJoy(e){
+  const r = stick.getBoundingClientRect();
+  let dx = (e.clientX - r.left - r.width/2)/(r.width/2), dy = (e.clientY - r.top - r.height/2)/(r.height/2);
+  const l = Math.hypot(dx,dy); if (l>1){ dx/=l; dy/=l; }
+  joy.x = dx; joy.y = dy; knob.style.transform = `translate(${dx*34}px,${dy*34}px)`;
+}
+
+/* ---- ui ---- */
+let started = false, panelOpen = false, near = null;
+const found = () => stations.filter(s => s.found).length;
+const starCount = () => stars.filter(s => s.got).length;
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(()=>t.classList.remove('on'), 2400); }
+function hud(){ $('pCount').textContent = found()+'/3'; $('sCount').textContent = starCount()+'/12'; }
+$('start').onclick = () => { $('intro').classList.remove('on'); started = true; };
+$('pClose').onclick = closePanel;
+$('prompt').onclick = () => panelOpen ? closePanel() : tryInteract();
+function openPanel(meta, title, body, tags, extra){
+  $('pMeta').textContent = meta; $('pTitle').innerHTML = title; $('pBody').textContent = body;
+  $('pTags').innerHTML = tags.map(t => `<span>${t}</span>`).join('');
+  document.querySelectorAll('.mailbtn').forEach(n => n.remove());
+  if (extra){ const a = document.createElement('a'); a.className='btn mailbtn'; a.style.marginRight='10px'; a.href='mailto:'+EMAIL; a.textContent = 'Email me'; $('pClose').before(a); }
+  $('panel').classList.add('on'); panelOpen = true; for (const k in keys) keys[k] = false;
+}
+function closePanel(){ $('panel').classList.remove('on'); panelOpen = false; }
+function tryInteract(){
+  if (!started || !near) return;
+  if (near.kind==='project'){
+    const d = near.data;
+    if (!near.found){ near.found = true; near.ring.material.color.set(0x5cc27f); hud(); toast(found()===3 ? 'All projects found. The gate in the centre is open.' : 'Project discovered'); if (found()===3) unlockGate(); }
+    openPanel(d.meta, d.name.replace(/(\S+)$/, '<em>$1</em>'), d.body, d.tags);
+  } else {
+    if (found() < 3){ openPanel('Locked', 'Not <em>yet</em>', 'Visit all three project stations to open the gate. You have found ' + found() + ' of 3.', []); }
+    else openPanel("What's next", "Let's build <em>something</em>.", "I'm looking for internships in product, strategy and operations. If you have a problem worth solving, I'd love to hear it. Stars collected: " + starCount() + "/12.", [], true);
+  }
+}
+function unlockGate(){ gRing.material.color.set(0xff9a5c); gOrb.material.color.set(0xffd36e); gOrb.material.emissive.set(0xffa500); gOrb.material.emissiveIntensity = .5; }
+
+/* ---- loop ---- */
+function resize(){ const w = innerWidth, h = innerHeight; renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+/* zoom: wheel, + / - keys, pinch. 1 = default, smaller = closer */
+let zoom = 1, zoomT = 1, bView = false; const lookT = new THREE.Vector3(0,1,0);
+const toggleView = () => { bView = !bView; $('viewBtn').textContent = bView ? 'Back to character' : 'View building'; };
+$('viewBtn').onclick = toggleView;
+addEventListener('keydown', e => { if (e.code==='KeyB' && started && !panelOpen) toggleView(); });
+const setZoom = v => { zoomT = Math.max(.3, Math.min(1.7, v)); };
+addEventListener('wheel', e => { e.preventDefault(); setZoom(zoomT * Math.exp(e.deltaY*.0015)); }, {passive:false});
+addEventListener('keydown', e => { if (e.key==='+' || e.key==='=') setZoom(zoomT*.8); if (e.key==='-' || e.key==='_') setZoom(zoomT*1.25); });
+const pts = new Map(); let pinch = 0;
+$('c').addEventListener('pointerdown', e => { pts.set(e.pointerId,[e.clientX,e.clientY]); if (pts.size===2) pinch = 0; });
+$('c').addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return; pts.set(e.pointerId,[e.clientX,e.clientY]);
+  if (pts.size===2){ const [p,q] = [...pts.values()], d = Math.hypot(p[0]-q[0], p[1]-q[1]); if (pinch) setZoom(zoomT*pinch/d); pinch = d; }
+});
+const upPt = e => { pts.delete(e.pointerId); pinch = 0; };
+$('c').addEventListener('pointerup', upPt); $('c').addEventListener('pointercancel', upPt);
+const clock = new THREE.Clock(); const camPos = new THREE.Vector3(0,12,22);
+let face = 0;
+function frame(){
+  const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
+  let ix = 0, iz = 0;
+  if (started && !panelOpen){
+    ix = (keys.KeyD||keys.ArrowRight?1:0) - (keys.KeyA||keys.ArrowLeft?1:0) + joy.x;
+    iz = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0) + joy.y;
+    const l = Math.hypot(ix,iz); if (l>1){ ix/=l; iz/=l; }
+  }
+  const moving = Math.hypot(ix,iz) > .1;
+  if (moving){
+    player.position.x += ix*7*dt; player.position.z += iz*7*dt;
+    let d = (Math.atan2(ix,iz) - face + Math.PI*3) % (Math.PI*2) - Math.PI; face += d*Math.min(1,dt*14); player.rotation.y = face;
+  }
+  if (Math.abs(player.position.x) < 14 && player.position.z < BUILD_Z) player.position.z = BUILD_Z;
+  // collisions + island edge
+  obstacles.forEach(o => { const dx = player.position.x-o.x, dz = player.position.z-o.z, d = Math.hypot(dx,dz), m = o.r+PR; if (d<m && d>0){ player.position.x = o.x+dx/d*m; player.position.z = o.z+dz/d*m; } });
+  const pd = Math.hypot(player.position.x, player.position.z); if (pd > R-1.2){ player.position.x *= (R-1.2)/pd; player.position.z *= (R-1.2)/pd; }
+  const sw = moving ? Math.sin(t*12) : 0;
+  body.position.y = moving ? Math.abs(sw)*.08 : Math.sin(t*2)*.02;
+  legL.rotation.x = sw*.7; legR.rotation.x = -sw*.7; armL.rotation.x = -sw*.6; armR.rotation.x = sw*.6;
+
+  const sp = snowGeo.attributes.position.array;
+  for (let i=0;i<SN;i++){ sp[i*3+1] -= snowSpd[i]*dt; sp[i*3] += Math.sin(t+i)*dt*.3; if (sp[i*3+1] < 0) sp[i*3+1] = 26; }
+  snowGeo.attributes.position.needsUpdate = true; snowPts.position.set(player.position.x,0,player.position.z);
+  // camera follows
+  zoom += (zoomT-zoom)*Math.min(1,dt*8);
+  const want = bView ? new THREE.Vector3(0, 11, 22) : new THREE.Vector3(player.position.x*.9, 1+10*zoom, player.position.z*.9+14*zoom);
+  camPos.lerp(want, 1-Math.pow(.001,dt)); camera.position.copy(camPos);
+  lookT.lerp(bView ? new THREE.Vector3(0,8.5,-21) : new THREE.Vector3(player.position.x*.9, 1, player.position.z*.9), 1-Math.pow(.001,dt));
+  camera.lookAt(lookT);
+
+  // animate world
+  stations.forEach(s => { s.tick(t); s.ring.material.opacity = .55 + Math.sin(t*2)*.2; });
+  gOrb.position.y = 2 + Math.sin(t*1.5)*.15; gRing.rotation.y = t*(found()===3?1.2:.3); gRing.rotation.x = Math.sin(t*.5)*.4;
+  stars.forEach(s => { if (s.got){ s.m.scale.multiplyScalar(.85); if (s.m.scale.x<.02) s.m.visible=false; return; }
+    s.m.rotation.y = t*2+s.ph; s.m.position.y = 1.1+Math.sin(t*2+s.ph)*.2;
+    if (started && Math.hypot(s.m.position.x-player.position.x, s.m.position.z-player.position.z) < 1.1){ s.got = true; hud(); if (starCount()===12) toast('All 12 stars collected'); } });
+
+  anim.forEach(f => f(t,dt));
+  // nearest interactable
+  near = null; let best = 3.6;
+  [...stations, gateSt].forEach(s => { const d = Math.hypot(s.g.position.x-player.position.x, s.g.position.z-player.position.z); if (d<best){ best = d; near = s; } });
+  const pr = $('prompt');
+  if (started && !panelOpen && near){ pr.textContent = near.kind==='gate' ? (found()===3 ? 'Press E to open the gate' : 'Press E to inspect the gate') : 'Press E to open ' + near.data.name; pr.classList.add('on'); }
+  else pr.classList.remove('on');
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
